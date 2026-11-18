@@ -1,0 +1,46 @@
+name: Migrate app source into Winlator repository
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out Winlator
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Copy app source into this repository
+        env:
+          SOURCE_REPOSITORY: https://github.com/spenc302/winlator-app-A0E3.git
+          SOURCE_COMMIT: 4860c79e2323bc896c937bed8b3d2c44e659f5db
+        run: |
+          set -euo pipefail
+          git clone "$SOURCE_REPOSITORY" "$RUNNER_TEMP/winlator-app-source"
+          git -C "$RUNNER_TEMP/winlator-app-source" checkout --detach "$SOURCE_COMMIT"
+
+          # Replace only the app gitlink; keep the vortek and gladio submodules.
+          git rm --cached -f app
+          rm -rf app
+          mkdir -p app
+          rsync -a --delete --exclude='.git' "$RUNNER_TEMP/winlator-app-source/" app/
+
+          # Remove only the app submodule declaration.
+          awk '
+            /^\[submodule "app"\]$/ { skip=1; next }
+            /^\[submodule / { skip=0 }
+            !skip { print }
+          ' .gitmodules > "$RUNNER_TEMP/gitmodules"
+          mv "$RUNNER_TEMP/gitmodules" .gitmodules
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A app .gitmodules
+          git commit -m "Vendor Winlator app source and port existing fixes"
+          git push origin HEAD:main
