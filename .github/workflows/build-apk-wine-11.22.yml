@@ -1,0 +1,96 @@
+name: Build Winlator APK with Wine 11.22 RootFS
+
+on:
+  workflow_run:
+    workflows:
+      - Build Winlator RootFS with Wine 11.22 ARM64EC
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      rootfs_run_id:
+        description: Successful Wine 11.22 RootFS workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build-apk:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out Winlator source and required submodules
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'main' }}
+          submodules: recursive
+
+      - name: Download Wine 11.22 RootFS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: winlator-rootfs-wine-11.22-arm64ec
+          path: ${{ runner.temp }}/wine-rootfs-artifact
+          run-id: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.rootfs_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify and install the new RootFS into the APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_DIR="${{ runner.temp }}/wine-rootfs-artifact"
+          ROOTFS_ARCHIVE="$ARTIFACT_DIR/rootfs-wine-11.22.tzst"
+          ASSET_PATH="app/app/src/main/assets/rootfs.tzst"
+
+          test -s "$ROOTFS_ARCHIVE"
+          (cd "$ARTIFACT_DIR" && sha256sum --check SHA256SUMS.txt)
+
+          ROOTFS_CHECK="$RUNNER_TEMP/rootfs-check"
+          mkdir -p "$ROOTFS_CHECK"
+          tar --zstd -xf "$ROOTFS_ARCHIVE" -C "$ROOTFS_CHECK"
+          test -x "$ROOTFS_CHECK/opt/wine/bin/wine"
+          test -f "$ROOTFS_CHECK/opt/wine/lib/wine/aarch64-windows/ntdll.dll"
+          test -f "$ROOTFS_CHECK/opt/wine/lib/wine/aarch64-unix/ntdll.so"
+
+          install -D -m 0644 "$ROOTFS_ARCHIVE" "$ASSET_PATH"
+          cmp "$ROOTFS_ARCHIVE" "$ASSET_PATH"
+          echo "Wine 11.22 RootFS installed into APK assets."
+          ls -lh "$ASSET_PATH"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK and CMake
+        run: |
+          set -euo pipefail
+          sdkmanager "ndk;28.2.13676358" "cmake;3.22.1"
+          yes | sdkmanager --licenses >/dev/null
+
+      - name: Build Winlator debug APK
+        working-directory: app
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Upload Winlator APK with Wine 11.22
+        uses: actions/upload-artifact@v4
+        with:
+          name: winlator-wine-11.22-debug-apk
+          path: app/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
