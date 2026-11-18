@@ -195,14 +195,18 @@ jobs:
           make -j"$(nproc)"
           make DESTDIR="$STAGE_DIR" install STRIP=true
           WINE_ROOT="$STAGE_DIR/opt/wine"
-          test -x "$WINE_ROOT/bin/wine"
-          test -f "$WINE_ROOT/lib/wine/aarch64-windows/ntdll.dll"
-          test -f "$WINE_ROOT/lib/wine/arm64ec-windows/ntdll.dll"
-          test -f "$WINE_ROOT/lib/wine/i386-windows/ntdll.dll"
-          test -f "$WINE_ROOT/lib/wine/aarch64-unix/ntdll.so"
+          echo "Installed Wine layout:"
+          ls -la "$WINE_ROOT/bin" "$WINE_ROOT/lib/wine"
+          test -x "$WINE_ROOT/bin/wine" || { echo "missing or not executable: $WINE_ROOT/bin/wine"; exit 1; }
+          test -f "$WINE_ROOT/lib/wine/aarch64-windows/ntdll.dll" || { echo "missing: $WINE_ROOT/lib/wine/aarch64-windows/ntdll.dll"; exit 1; }
+          test -f "$WINE_ROOT/lib/wine/i386-windows/ntdll.dll" || { echo "missing: $WINE_ROOT/lib/wine/i386-windows/ntdll.dll"; exit 1; }
+          test -f "$WINE_ROOT/lib/wine/aarch64-unix/ntdll.so" || { echo "missing: $WINE_ROOT/lib/wine/aarch64-unix/ntdll.so"; exit 1; }
+          # Wine installs the combined ARM64X ntdll under aarch64-windows.
+          # It contains the ARM64EC/ARM64X implementation; there is no separate
+          # arm64ec-windows install directory in this build layout.
           file "$WINE_ROOT/bin/wine"
           file "$WINE_ROOT/lib/wine/aarch64-unix/ntdll.so"
-          file "$WINE_ROOT/lib/wine/arm64ec-windows/ntdll.dll"
+          file "$WINE_ROOT/lib/wine/aarch64-windows/ntdll.dll"
           printf '%s\n' "Wine source version: $WINE_VERSION" > "$STAGE_DIR/WINE-BUILD-INFO.txt"
 
       - name: Merge Wine into existing RootFS and package
@@ -214,8 +218,8 @@ jobs:
           rm -rf "$ROOTFS_DIR/opt/wine"
           mkdir -p "$ROOTFS_DIR/opt/wine"
           rsync -a "$WINE_ROOT/" "$ROOTFS_DIR/opt/wine/"
-          test -x "$ROOTFS_DIR/opt/wine/bin/wine"
-          test -f "$ROOTFS_DIR/opt/wine/lib/wine/arm64ec-windows/ntdll.dll"
+          test -x "$ROOTFS_DIR/opt/wine/bin/wine" || { echo "missing or not executable: $ROOTFS_DIR/opt/wine/bin/wine"; exit 1; }
+          test -f "$ROOTFS_DIR/opt/wine/lib/wine/aarch64-windows/ntdll.dll" || { echo "missing ARM64X/ARM64EC ntdll: $ROOTFS_DIR/opt/wine/lib/wine/aarch64-windows/ntdll.dll"; exit 1; }
           mkdir -p dist
           tar -I 'zstd -T0 -19' -cf dist/rootfs-wine-11.22.tzst -C "$ROOTFS_DIR" .
           test -s dist/rootfs-wine-11.22.tzst
