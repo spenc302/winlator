@@ -5,10 +5,10 @@ run-name: Build Wine 11.22 ARM64EC RootFS
   workflow_dispatch:
   push:
     branches:
-      - generic-winlator-port
+      - main
     paths:
       - .github/workflows/build-rootfs-wine-11.22.yml
-      - src/main/assets/rootfs.tzst
+      - app/app/app/app/src/main/assets/rootfs.tzst
 
 permissions:
   contents: read
@@ -22,10 +22,10 @@ jobs:
       WINE_VERSION: "11.22"
 
     steps:
-      - name: Checkout Winlator app source
+      - name: Checkout Winlator repository
         uses: actions/checkout@v4
         with:
-          ref: generic-winlator-port
+          ref: main
 
       - name: Install cross-build dependencies
         run: |
@@ -88,9 +88,9 @@ jobs:
         run: |
           set -euo pipefail
           ROOTFS_DIR="$RUNNER_TEMP/rootfs"
-          test -s src/main/assets/rootfs.tzst
+          test -s app/app/src/main/assets/rootfs.tzst
           mkdir -p "$ROOTFS_DIR"
-          tar --zstd -xf src/main/assets/rootfs.tzst -C "$ROOTFS_DIR"
+          tar --zstd -xf app/app/src/main/assets/rootfs.tzst -C "$ROOTFS_DIR"
           test -d "$ROOTFS_DIR/usr"
           test -x "$ROOTFS_DIR/opt/wine/bin/wine"
           test -e "$ROOTFS_DIR/lib/ld-linux-aarch64.so.1" -o -e "$ROOTFS_DIR/usr/lib/ld-linux-aarch64.so.1"
