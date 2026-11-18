@@ -51,7 +51,9 @@ jobs:
           ASSET_PATH="app/app/src/main/assets/rootfs.tzst"
 
           test -s "$ROOTFS_ARCHIVE"
-          (cd "$ARTIFACT_DIR" && sha256sum --check SHA256SUMS.txt)
+          EXPECTED_SHA256="$(awk 'NR == 1 {print $1}' "$ARTIFACT_DIR/SHA256SUMS.txt")"
+          test "${#EXPECTED_SHA256}" -eq 64
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$ROOTFS_ARCHIVE" | sha256sum --check -
 
           ROOTFS_CHECK="$RUNNER_TEMP/rootfs-check"
           mkdir -p "$ROOTFS_CHECK"
